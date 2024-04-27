@@ -21,7 +21,7 @@ func MustCompile(pattern string) *Walker {
 }
 
 func Walk(input string, callback WalkHandler) {
-	p := syntax.Parser{LenientMode: true}
+	p := syntax.Parser{NonStrictMode: true}
 	ast, buffer, err := p.Parse(input, nil)
 	if err != nil {
 		panic(err)
@@ -30,7 +30,7 @@ func Walk(input string, callback WalkHandler) {
 }
 
 func Expand(input string) []string {
-	p := syntax.Parser{LenientMode: true}
+	p := syntax.Parser{NonStrictMode: true}
 	ast, buffer, err := p.Parse(input, nil)
 	if err != nil {
 		panic(err)
@@ -40,7 +40,7 @@ func Expand(input string) []string {
 }
 
 func AppendExpand(data []string, input string) []string {
-	p := syntax.Parser{LenientMode: true}
+	p := syntax.Parser{NonStrictMode: true}
 	ast, buffer, err := p.Parse(input, nil)
 	if err != nil {
 		panic(err)
@@ -50,7 +50,7 @@ func AppendExpand(data []string, input string) []string {
 }
 
 func PrintTree(input string) {
-	p := syntax.Parser{LenientMode: true}
+	p := syntax.Parser{NonStrictMode: true}
 	ast, _, err := p.Parse(input, nil)
 	if err != nil {
 		panic(err)

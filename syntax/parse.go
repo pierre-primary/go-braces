@@ -18,12 +18,12 @@ var (
 )
 
 type Parser struct {
-	stack        []*Node
-	free         *Node
-	LenientMode  bool
-	IgnoreEscape bool
-	IgnoreQuote  bool
-	AnyCharRange bool
+	stack         []*Node
+	free          *Node
+	NonStrictMode bool
+	IgnoreEscape  bool
+	IgnoreQuote   bool
+	AnyCharRange  bool
 }
 
 func (p *Parser) newNode(op Op) (node *Node) {
@@ -441,7 +441,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 		}
 	}
 
-	if !p.LenientMode && que > 0 {
+	if !p.NonStrictMode && que > 0 {
 		return nil, buffer, ErrMissingQuote
 	}
 
