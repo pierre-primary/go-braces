@@ -35,23 +35,6 @@ func (p *Parser) newNode(op Op) (node *Node) {
 	return node
 }
 
-func (p *Parser) newGroup(op Op, nodes []*Node) *Node {
-	node := p.newNode(op)
-	subs := node.Subs[:0]
-	for _, item := range nodes {
-		if item.Op < opPseudo {
-			if item.Op == op {
-				subs = append(subs, item.Subs...)
-				p.reuse(item)
-			} else {
-				subs = append(subs, item)
-			}
-		}
-	}
-	node.Subs = subs
-	return node
-}
-
 func (p *Parser) reuse(node *Node) {
 	node.Next = p.free
 	p.free = node
@@ -77,6 +60,20 @@ func (p *Parser) literal(val string) {
 	p.node(OpLiteral, val)
 }
 
+func (p *Parser) flatten(subs []*Node, op Op, nodes []*Node) []*Node {
+	for _, item := range nodes {
+		if item.Op < opPseudo {
+			if item.Op == op {
+				subs = append(subs, item.Subs...)
+				p.reuse(item)
+			} else {
+				subs = append(subs, item)
+			}
+		}
+	}
+	return subs
+}
+
 func (p *Parser) concat(offset int) {
 	if offset < 0 {
 		offset = len(p.stack)
@@ -85,19 +82,21 @@ func (p *Parser) concat(offset int) {
 		}
 	}
 
-	nodes := p.stack[offset:]
-	switch len(nodes) {
+	switch len(p.stack) - offset {
 	case 0:
 		if !p.NoEmpty {
 			p.node(OpEmpty, "")
 		}
-		return
+		fallthrough
 	case 1:
 		return
 	}
+
+	nodes := p.stack[offset:]
 	p.stack = p.stack[:offset]
 
-	node := p.newGroup(OpConcat, nodes)
+	node := p.newNode(OpConcat)
+	node.Subs = p.flatten(node.Subs, OpConcat, nodes)
 	if subs := node.Subs; len(subs) > 1 {
 		last := subs[0]
 		for _, item := range subs[1:] {
@@ -113,7 +112,8 @@ func (p *Parser) alternate(offset int) {
 	p.stack = p.stack[:offset]
 
 	// ASSERT: at least two nodes required
-	node := p.newGroup(OpAlternate, nodes)
+	node := p.newNode(OpAlternate)
+	node.Subs = p.flatten(node.Subs, OpAlternate, nodes)
 	// TODO: optimize node.Subs
 	p.push(node)
 }
@@ -122,32 +122,29 @@ func (p *Parser) literalize(offset int, backward bool, buffer []byte) []byte {
 	if backward && offset > 0 && p.stack[offset-1].Op == OpLiteral {
 		offset--
 	}
-	nodes := p.stack
 	var first *Node
-	for idx := offset; idx < len(nodes); idx++ {
-		item := nodes[idx]
-		if item.Op != OpLiteral && item.Op < opPseudo {
-			if first != nil {
-				first.Val = append(first.Val, buffer...)
+	for idx := offset; idx < len(p.stack); idx++ {
+		item := p.stack[idx]
+		if item.Op == OpLiteral || item.Op >= opPseudo {
+			if first == nil {
+				first, buffer = item, buffer[:0]
+				first.Op = OpLiteral
+			} else {
+				buffer = append(buffer, item.Val...)
+				p.reuse(item)
+				continue
 			}
+		} else if first != nil {
+			first.Val = append(first.Val, buffer...)
 			first = nil
-		} else if first == nil {
-			first, buffer = item, buffer[:0]
-			first.Op = OpLiteral
-		} else {
-			buffer = append(buffer, item.Val...)
-			p.reuse(item)
-			continue
 		}
-		if idx > offset {
-			nodes[offset] = item
-		}
+		p.stack[offset] = item
 		offset++
 	}
 	if first != nil {
 		first.Val = append(first.Val, buffer...)
 	}
-	p.stack = nodes[:offset]
+	p.stack = p.stack[:offset]
 	return buffer
 }
 
@@ -185,22 +182,25 @@ func careateRangeData(sta, end, sep, wid int) (bool, []byte) {
 	return true, unsafe.Slice((*byte)(unsafe.Pointer(&opts[0])), size)
 }
 
-func (p *Parser) ranges(offset int) bool {
+func (p *Parser) ranges(offset int) (ok bool) {
 	nodes := p.stack[offset:]
 	sep := 0
 	switch len(nodes) {
-	case 4:
-	case 6:
-		if ok, v := parseInt(nodes[5].Val); ok {
-			sep = v
-			break
-		}
-		return false
 	default:
 		return false
+	case 6:
+		if nodes[5].Op != OpLiteral || nodes[4].Op != opBraceRange {
+			return false
+		}
+		if ok, sep = parseInt(nodes[5].Val); !ok {
+			return false
+		}
+		fallthrough
+	case 4:
+		if nodes[3].Op != OpLiteral || nodes[2].Op != opBraceRange || nodes[1].Op != OpLiteral {
+			return false
+		}
 	}
-
-	_ = nodes[3] // assert bound
 
 	vs, ve := nodes[1].Val, nodes[3].Val
 	ls, le := len(vs), len(ve)
@@ -278,6 +278,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 	}
 	blocks := make([]block, 0, 4)
 
+	buffer = buffer[:0]
 	p.stack = p.stack[:0]
 	sta := -1
 
@@ -286,6 +287,10 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			p.literal(input[sta:idx])
 			sta = ^sta
 		}
+	}
+
+	literalize := func(offset int, backward bool) {
+		buffer = p.literalize(offset, backward, buffer)
 	}
 
 	var que, esc byte
@@ -375,10 +380,11 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			// range mode => alternate mode
 			if b.ranges < -1 || b.ranges > 0 {
 				b.ranges = 0
-				buffer = p.literalize(b.base+1, false, buffer)
+				literalize(b.base+1, false)
 			}
 
 			submit(end)
+
 			p.concat(-1)
 			p.node(opBraceDelim, ",")
 			b.delims++
@@ -429,14 +435,14 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			}
 
 			// Rollback to literal
-			buffer = p.literalize(b.base, true, buffer)
+			literalize(b.base, true)
 			goto Regular
 		}
 	}
 
 	// Non-Closed braces rollback to literal
 	if len(blocks) > 0 {
-		buffer = p.literalize(blocks[0].base, true, buffer)
+		literalize(blocks[0].base, true)
 	}
 
 	// Last Literal
@@ -450,5 +456,5 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 }
 
 func Parse(input string, buffer []byte) (*Node, []byte) {
-	return (&Parser{}).Parse(input, nil)
+	return (&Parser{}).Parse(input, buffer)
 }

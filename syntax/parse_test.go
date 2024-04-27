@@ -17,8 +17,8 @@ func BenchmarkParse(t *testing.B) {
 		}
 	}
 	t.Run("Literal", Parse("abcdefg"))
-	t.Run("Alternate", Parse("{abc,def,ghi}"))
-	t.Run("Mixed", Parse("aaa{abc,def,ghi}bbb"))
+	t.Run("Alternate", Parse("{ab,cd,ef}"))
+	t.Run("Mixed", Parse("aa{ab,cd,ef}bb"))
 	t.Run("CharRange:[0-9]", Parse("{0..9}"))
 	t.Run("CharRange:[a-z]", Parse("{a..z}"))
 	t.Run("CharRange:[A-Z]", Parse("{A..Z}"))
