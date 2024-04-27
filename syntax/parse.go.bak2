@@ -61,20 +61,20 @@ func (p *Parser) push(node *Node) {
 	p.stack = append(p.stack, node)
 }
 
-func (p *Parser) node(op Op, val string) {
+func (p *Parser) node(op Op, val ...byte) {
 	node := p.newNode(op)
 	node.Val = append(node.Val0[:0], val...)
 	p.push(node)
 }
 
-func (p *Parser) literal(val string) {
+func (p *Parser) literal(val ...byte) {
 	if len(p.stack) > 0 {
 		if node := p.stack[len(p.stack)-1]; node.Op == OpLiteral {
 			node.Val = append(node.Val, val...)
 			return
 		}
 	}
-	p.node(OpLiteral, val)
+	p.node(OpLiteral, val...)
 }
 
 func (p *Parser) concat(offset int) {
@@ -89,7 +89,7 @@ func (p *Parser) concat(offset int) {
 	switch len(nodes) {
 	case 0:
 		if !p.NoEmpty {
-			p.node(OpEmpty, "")
+			p.node(OpEmpty)
 		}
 		return
 	case 1:
@@ -129,10 +129,10 @@ func (p *Parser) literalize(offset int, backward bool, buffer []byte) []byte {
 		if item.Op != OpLiteral && item.Op < opPseudo {
 			if first != nil {
 				first.Val = append(first.Val, buffer...)
+				first, buffer = nil, buffer[:0]
 			}
-			first = nil
 		} else if first == nil {
-			first, buffer = item, buffer[:0]
+			first = item
 			first.Op = OpLiteral
 		} else {
 			buffer = append(buffer, item.Val...)
@@ -146,6 +146,7 @@ func (p *Parser) literalize(offset int, backward bool, buffer []byte) []byte {
 	}
 	if first != nil {
 		first.Val = append(first.Val, buffer...)
+		first, buffer = nil, buffer[:0]
 	}
 	p.stack = nodes[:offset]
 	return buffer
@@ -279,31 +280,37 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 	blocks := make([]block, 0, 4)
 
 	p.stack = p.stack[:0]
-	sta := -1
+	buffer = buffer[:0]
 
-	submit := func(idx int) {
-		if sta >= 0 {
-			p.literal(input[sta:idx])
-			sta = ^sta
+	submit := func() {
+		if len(buffer) > 0 {
+			p.literal(buffer...)
+			buffer = buffer[:0]
 		}
+	}
+
+	literalize := func(offset int, backward bool) {
+		if len(buffer) > 0 {
+			p.literal(buffer...)
+		}
+		buffer = p.literalize(offset, backward, buffer[:0])
 	}
 
 	var que, esc byte
 
-	for end := 0; ; end++ {
+	for idx := 0; ; idx++ {
 		goto Skip
 	Regular:
-		if sta < 0 {
-			sta = end
-		}
-		if input[end] < utf8.RuneSelf {
-			end++
+		if input[idx] < utf8.RuneSelf {
+			buffer = append(buffer, input[idx])
+			idx++
 		} else {
-			_, w := utf8.DecodeRuneInString(input[end:])
-			end += w
+			_, w := utf8.DecodeRuneInString(input[idx:])
+			buffer = append(buffer, input[idx:idx+w]...)
+			idx += w
 		}
 	Skip:
-		if end >= len(input) {
+		if idx >= len(input) {
 			break
 		}
 
@@ -313,11 +320,11 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			goto Regular
 		}
 
-		ch := input[end]
+		ch := input[idx]
 
 		/** Escape Character **/
 		if ch == '\\' {
-			if p.IgnoreEscape || end >= len(input)-1 {
+			if p.IgnoreEscape || idx >= len(input)-1 {
 				goto Regular
 			}
 
@@ -326,7 +333,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 				goto Regular
 			}
 
-			submit(end)
+			submit()
 			continue
 		}
 
@@ -341,7 +348,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 				goto Regular
 			}
 
-			submit(end)
+			submit()
 			continue
 		}
 
@@ -359,35 +366,32 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 				goto Regular
 			}
 
-			submit(end)
+			submit()
 		case '{':
 			/** Braces Open **/
-			submit(end)
+			submit()
 			blocks = append(blocks, block{base: len(p.stack), delims: 0, ranges: 0})
-			p.node(opBraceOpen, "{")
+			p.node(opBraceOpen, '{')
 		case ',':
 			/** Braces Comma Separator **/
 			if len(blocks) == 0 {
 				goto Regular
 			}
-			b := &blocks[len(blocks)-1]
+			submit()
 
+			b := &blocks[len(blocks)-1]
 			// range mode => alternate mode
 			if b.ranges < -1 || b.ranges > 0 {
 				b.ranges = 0
-				buffer = p.literalize(b.base+1, false, buffer)
+				literalize(b.base+1, false)
 			}
 
-			submit(end)
 			p.concat(-1)
-			p.node(opBraceDelim, ",")
+			p.node(opBraceDelim, ',')
 			b.delims++
 		case '.':
 			/** Braces Range Separator **/
-			if end+1 >= len(input) {
-				break
-			}
-			if len(blocks) == 0 || input[end+1] != '.' {
+			if len(blocks) == 0 || idx+1 >= len(input) || input[idx+1] != '.' {
 				goto Regular
 			}
 			b := &blocks[len(blocks)-1]
@@ -401,11 +405,11 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 				goto Regular
 			}
 
-			submit(end)
+			submit()
 
-			p.node(opBraceRange, "..")
+			p.node(opBraceRange, '.', '.')
 			b.ranges++
-			end++
+			idx++
 		case '}':
 			/** Braces Close **/
 			if len(blocks) == 0 {
@@ -414,7 +418,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			b := &blocks[len(blocks)-1]
 			blocks = blocks[:len(blocks)-1]
 
-			submit(end)
+			submit()
 
 			// Parse Alternate
 			if b.delims > 0 {
@@ -429,18 +433,18 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			}
 
 			// Rollback to literal
-			buffer = p.literalize(b.base, true, buffer)
+			literalize(b.base, true)
 			goto Regular
 		}
 	}
 
+	// Last Literal
+	submit()
+
 	// Non-Closed braces rollback to literal
 	if len(blocks) > 0 {
-		buffer = p.literalize(blocks[0].base, true, buffer)
+		literalize(blocks[0].base, true)
 	}
-
-	// Last Literal
-	submit(len(input))
 
 	// Finalize
 	p.concat(0)

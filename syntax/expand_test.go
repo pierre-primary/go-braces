@@ -29,6 +29,7 @@ func BenchmarkExpand(t *testing.B) {
 	t.Run("CharRange:[A-Z]", expand("{A..Z}"))
 	t.Run("IntRange:10", expand("{1..10}"))
 	t.Run("IntRange:100", expand("{1..100}"))
+	t.Run("Unicode", expand("{你好吗,你在吗,你在哪}"))
 }
 
 func TestExpand(t *testing.T) {

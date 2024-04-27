@@ -24,5 +24,5 @@ func BenchmarkParse(t *testing.B) {
 	t.Run("CharRange:[A-Z]", Parse("{A..Z}"))
 	t.Run("IntRange:10", Parse("{1..10}"))
 	t.Run("IntRange:100", Parse("{1..100}"))
-	t.Run("Unicode", Parse("你{好,在{那,}}{吗,么}"))
+	t.Run("Unicode", Parse("{你好吗,你在吗,你在哪}"))
 }
