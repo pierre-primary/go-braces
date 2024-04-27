@@ -281,6 +281,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 		delims int
 	}
 	blocks := make([]block, 0, 4)
+	var blk *block
 
 	buffer = buffer[:0]
 	p.stack = p.stack[:0]
@@ -326,6 +327,10 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 
 		/** Escape Character **/
 		if ch == '\\' {
+			if blk != nil && blk.ranges >= 0 {
+				blk.ranges = ^blk.ranges
+			}
+
 			if p.IgnoreEscape || end+1 >= len(input) {
 				goto Regular
 			}
@@ -373,56 +378,59 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			/** Braces Open **/
 			submit(end)
 			blocks = append(blocks, block{base: len(p.stack), delims: 0, ranges: 0})
+			blk = &blocks[len(blocks)-1]
 			p.node(opBraceOpen, "{")
 		case ',':
 			/** Braces Comma Separator **/
-			if len(blocks) == 0 {
+			if blk == nil {
 				goto Regular
 			}
-			b := &blocks[len(blocks)-1]
 
 			// range mode => alternate mode
-			if b.ranges < -1 || b.ranges > 0 {
-				b.ranges = 0
-				literalize(b.base+1, false)
+			if blk.ranges < -1 || blk.ranges > 0 {
+				blk.ranges = 0
+				literalize(blk.base+1, false)
 			}
 
 			submit(end)
 
 			p.concat(-1)
 			p.node(opBraceDelim, ",")
-			b.delims++
+			blk.delims++
 		case '.':
 			/** Braces Range Separator **/
-			if len(blocks) == 0 {
+			if blk == nil {
 				goto Regular
 			}
 			if end+1 >= len(input) || input[end+1] != '.' {
 				goto Regular
 			}
-			b := &blocks[len(blocks)-1]
 
 			// invalid range
-			if b.delims > 0 || b.ranges < 0 || b.ranges >= 2 {
+			if blk.delims > 0 || blk.ranges < 0 || blk.ranges >= 2 {
 				goto Regular
 			}
-			if numSub := len(p.stack) - b.base; numSub != 1 && numSub != 3 {
-				b.ranges = ^b.ranges
+			if numSub := len(p.stack) - blk.base; numSub != 1 && numSub != 3 {
+				blk.ranges = ^blk.ranges
 				goto Regular
 			}
 
 			submit(end)
 
 			p.node(opBraceRange, "..")
-			b.ranges++
+			blk.ranges++
 			end++
 		case '}':
 			/** Braces Close **/
-			if len(blocks) == 0 {
+			if blk == nil {
 				goto Regular
 			}
-			b := &blocks[len(blocks)-1]
+
 			blocks = blocks[:len(blocks)-1]
+			b := blk
+			if blk = nil; len(blocks) > 0 {
+				blk = &blocks[len(blocks)-1]
+			}
 
 			submit(end)
 
