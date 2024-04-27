@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	pattern := `a{a{a,b}b`
+	pattern := `{1..9}`
 
 	braces.Walk(pattern, func(str string) {
 		fmt.Println(str)

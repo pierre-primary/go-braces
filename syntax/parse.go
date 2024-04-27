@@ -178,8 +178,7 @@ func careateRangeData(sta, end, sep, wid int) (bool, []byte) {
 	}
 
 	opts := [5]int{sta, end, int(num), sep, wid}
-	const size = 16 << (^uint(0) >> 63)
-	return true, unsafe.Slice((*byte)(unsafe.Pointer(&opts[0])), size)
+	return true, unsafe.Slice((*byte)(unsafe.Pointer(&opts[0])), int(unsafe.Sizeof(opts)))
 }
 
 func (p *Parser) ranges(offset int) (ok bool) {
