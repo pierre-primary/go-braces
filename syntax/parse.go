@@ -317,7 +317,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 
 		/** Escape Character **/
 		if ch == '\\' {
-			if p.IgnoreEscape || end >= len(input)-1 {
+			if p.IgnoreEscape || end+1 >= len(input) {
 				goto Regular
 			}
 
@@ -384,10 +384,10 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			b.delims++
 		case '.':
 			/** Braces Range Separator **/
-			if end+1 >= len(input) {
-				break
+			if len(blocks) == 0 {
+				goto Regular
 			}
-			if len(blocks) == 0 || input[end+1] != '.' {
+			if end+1 >= len(input) || input[end+1] != '.' {
 				goto Regular
 			}
 			b := &blocks[len(blocks)-1]
@@ -440,7 +440,9 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 	}
 
 	// Last Literal
-	submit(len(input))
+	if sta >= 0 {
+		p.literal(input[sta:])
+	}
 
 	// Finalize
 	p.concat(0)
