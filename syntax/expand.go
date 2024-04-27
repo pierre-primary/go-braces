@@ -59,8 +59,8 @@ func walkAlternate(buf []byte, node *Node, cb WalkHandler) []byte {
 }
 
 func walkCharRange(buf []byte, node *Node, cb WalkHandler) []byte {
-	rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 5)
-	sta, num, sep := rg[0], rg[2], rg[3]
+	rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 4)
+	sta, num, sep := rg[0], rg[1], rg[2]
 
 	offset := len(buf)
 	buf = walk(utf8.AppendRune(buf, rune(sta)), node.Next, cb)
@@ -72,8 +72,8 @@ func walkCharRange(buf []byte, node *Node, cb WalkHandler) []byte {
 }
 
 func walkIntegerRange(buf []byte, node *Node, cb WalkHandler) []byte {
-	rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 5)
-	sta, num, sep, wid := rg[0], rg[2], rg[3], rg[4]
+	rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 4)
+	sta, num, sep, wid := rg[0], rg[1], rg[2], rg[3]
 
 	offset := len(buf)
 	buf = walk(appendNumber(buf, sta, wid), node.Next, cb)

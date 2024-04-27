@@ -7,11 +7,13 @@ import (
 )
 
 func main() {
-	pattern := `{1..9}`
+	pattern := `{a..z..2}`
 
 	braces.Walk(pattern, func(str string) {
 		fmt.Println(str)
 	})
 
 	braces.PrintTree(pattern)
+
+	fmt.Println(braces.MustCompile("{a..z..2}").Equal(braces.MustCompile("{a..y..2}")))
 }

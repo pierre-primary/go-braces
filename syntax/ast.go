@@ -106,17 +106,17 @@ func (n *Node) Expand(data []string, buffer []byte) ([]string, []byte) {
 func printNode(node *Node, deepth int) {
 	switch node.Op {
 	case OpCharRange:
-		rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 5)
-		sta, end, sep := rg[0], rg[1], rg[3]
-		s := fmt.Sprintf("%c..%c", rune(sta), rune(end))
+		rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 4)
+		sta, num, sep := rg[0], rg[1], rg[2]
+		s := fmt.Sprintf("%c..%c", rune(sta), rune(sta+num*sep))
 		if sep > 1 || sep < -1 {
 			s = fmt.Sprintf("%s..%d", s, sep)
 		}
 		fmt.Printf("%*s - %s (\"%s\")\n", deepth<<1, "", node.Op, s)
 	case OpIntegerRange:
 		rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 5)
-		sta, end, sep, wid := rg[0], rg[1], rg[3], rg[4]
-		s := fmt.Sprintf("%*d..%*d", wid, sta, wid, end)
+		sta, num, sep, wid := rg[0], rg[1], rg[2], rg[3]
+		s := fmt.Sprintf("%*d..%*d", wid, sta, wid, sta+num*sep)
 		if sep > 1 || sep < -1 {
 			s = fmt.Sprintf("%s..%d", s, sep)
 		}

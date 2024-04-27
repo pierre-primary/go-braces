@@ -174,10 +174,15 @@ func careateRangeData(sta, end, sep, wid int) (bool, []byte) {
 		if div+1 > math.MaxInt { // elem limit
 			return false, nil
 		}
-		num = int(div)
+		if div == 0 {
+			sep = 0
+			num = 0
+		} else {
+			num = int(div)
+		}
 	}
 
-	opts := [5]int{sta, end, int(num), sep, wid}
+	opts := [4]int{sta, int(num), sep, wid}
 	return true, unsafe.Slice((*byte)(unsafe.Pointer(&opts[0])), int(unsafe.Sizeof(opts)))
 }
 
