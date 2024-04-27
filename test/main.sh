@@ -8,4 +8,3 @@ test() {
 
 zzz=10
 
-test {\{a..z..2},abc}

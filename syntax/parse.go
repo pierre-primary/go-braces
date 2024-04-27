@@ -1,6 +1,7 @@
 package syntax
 
 import (
+	"errors"
 	"math"
 	"unicode/utf8"
 	"unsafe"
@@ -12,14 +13,16 @@ const (
 	opBraceRange
 )
 
+var (
+	ErrMissingQuote = errors.New("missing closing quote character")
+)
+
 type Parser struct {
 	stack        []*Node
 	free         *Node
-	NoEmpty      bool
+	LenientMode  bool
 	IgnoreEscape bool
-	KeepEscape   bool
 	IgnoreQuote  bool
-	KeepQuote    bool
 	AnyCharRange bool
 }
 
@@ -84,9 +87,7 @@ func (p *Parser) concat(offset int) {
 
 	switch len(p.stack) - offset {
 	case 0:
-		if !p.NoEmpty {
-			p.node(OpEmpty, "")
-		}
+		p.node(OpEmpty, "")
 		fallthrough
 	case 1:
 		return
@@ -274,7 +275,7 @@ func (p *Parser) ranges(offset int) (ok bool) {
 	return true
 }
 
-func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
+func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 	type block struct {
 		base   int // Base Stack Index
 		ranges int
@@ -336,10 +337,6 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			}
 
 			esc = ch
-			if p.KeepEscape {
-				goto Regular
-			}
-
 			submit(end)
 			continue
 		}
@@ -351,10 +348,6 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			}
 
 			que = 0
-			if p.KeepQuote {
-				goto Regular
-			}
-
 			submit(end)
 			continue
 		}
@@ -369,10 +362,6 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 			}
 
 			que = ch
-			if p.KeepQuote {
-				goto Regular
-			}
-
 			submit(end)
 		case '{':
 			/** Braces Open **/
@@ -452,6 +441,10 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 		}
 	}
 
+	if !p.LenientMode && que > 0 {
+		return nil, buffer, ErrMissingQuote
+	}
+
 	// Non-Closed braces rollback to literal
 	if len(blocks) > 0 {
 		literalize(blocks[0].base, true)
@@ -464,9 +457,9 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte) {
 
 	// Finalize
 	p.concat(0)
-	return p.stack[0], buffer
+	return p.stack[0], buffer, nil
 }
 
-func Parse(input string, buffer []byte) (*Node, []byte) {
+func Parse(input string, buffer []byte) (*Node, []byte, error) {
 	return (&Parser{}).Parse(input, buffer)
 }

@@ -5,7 +5,10 @@ import (
 )
 
 func Compile(pattern string) (*Walker, error) {
-	ast, buffer := syntax.Parse(pattern, nil)
+	ast, buffer, err := syntax.Parse(pattern, nil)
+	if err != nil {
+		return nil, err
+	}
 	return &Walker{ast, buffer, pattern}, nil
 }
 
@@ -17,24 +20,40 @@ func MustCompile(pattern string) *Walker {
 	return w
 }
 
-func PrintTree(input string) {
-	ast, _ := syntax.Parse(input, nil)
-	ast.Print()
-}
-
 func Walk(input string, callback WalkHandler) {
-	ast, buffer := syntax.Parse(input, nil)
+	p := syntax.Parser{LenientMode: true}
+	ast, buffer, err := p.Parse(input, nil)
+	if err != nil {
+		panic(err)
+	}
 	ast.Walk(callback, buffer)
 }
 
 func Expand(input string) []string {
-	ast, buffer := syntax.Parse(input, nil)
+	p := syntax.Parser{LenientMode: true}
+	ast, buffer, err := p.Parse(input, nil)
+	if err != nil {
+		panic(err)
+	}
 	data, _ := ast.Expand(nil, buffer)
 	return data
 }
 
 func AppendExpand(data []string, input string) []string {
-	ast, buffer := syntax.Parse(input, nil)
+	p := syntax.Parser{LenientMode: true}
+	ast, buffer, err := p.Parse(input, nil)
+	if err != nil {
+		panic(err)
+	}
 	data, _ = ast.Expand(data, buffer)
 	return data
+}
+
+func PrintTree(input string) {
+	p := syntax.Parser{LenientMode: true}
+	ast, _, err := p.Parse(input, nil)
+	if err != nil {
+		panic(err)
+	}
+	ast.Print()
 }

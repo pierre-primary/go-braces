@@ -28,3 +28,7 @@ func (w *Walker) Expand(data []string) []string {
 	data, w.buffer = w.ast.Expand(data, w.buffer)
 	return data
 }
+
+func (w *Walker) Print() {
+	w.ast.Print()
+}
