@@ -17,13 +17,19 @@ var (
 	ErrMissingQuote = errors.New("missing closing quote character")
 )
 
+type Flags uint16
+
+const (
+	IgnoreEscape Flags = 1 << iota
+	IgnoreQuote
+	AnyCharRange
+	PermissiveMode
+)
+
 type Parser struct {
-	stack         []*Node
-	free          *Node
-	NonStrictMode bool
-	IgnoreEscape  bool
-	IgnoreQuote   bool
-	AnyCharRange  bool
+	flags Flags
+	stack []*Node
+	free  *Node
 }
 
 func (p *Parser) newNode(op Op) (node *Node) {
@@ -194,7 +200,7 @@ func (p *Parser) ranges(offset int) (ok bool) {
 	default:
 		return false
 	case 6:
-		if nodes[5].Op != OpLiteral || nodes[4].Op != opBraceRange {
+		if _ = nodes[5]; nodes[4].Op != opBraceRange || nodes[5].Op != OpLiteral {
 			return false
 		}
 		if ok, sep = parseInt(nodes[5].Val); !ok {
@@ -202,12 +208,28 @@ func (p *Parser) ranges(offset int) (ok bool) {
 		}
 		fallthrough
 	case 4:
-		if nodes[3].Op != OpLiteral || nodes[2].Op != opBraceRange || nodes[1].Op != OpLiteral {
+		if _ = nodes[3]; nodes[2].Op != opBraceRange {
 			return false
 		}
 	}
 
-	vs, ve := nodes[1].Val, nodes[3].Val
+	var vs, ve []byte
+	if nodes[1].Op == OpLiteral {
+		vs = nodes[1].Val
+	} else if nodes[1].Op == OpEscape {
+		vs = nodes[1].Val[1:]
+	} else {
+		return false
+	}
+
+	if nodes[3].Op == OpLiteral {
+		ve = nodes[3].Val
+	} else if nodes[3].Op == OpEscape {
+		ve = nodes[3].Val[1:]
+	} else {
+		return false
+	}
+
 	ls, le := len(vs), len(ve)
 
 	op, wid := OpUnknown, 0
@@ -216,7 +238,7 @@ func (p *Parser) ranges(offset int) (ok bool) {
 		cs, ce := vs[0], ve[0]
 		if isDigit(cs) && isDigit(ce) {
 			op, sta, end = OpIntegerRange, int(cs-'0'), int(ce-'0')
-		} else if p.AnyCharRange && cs < utf8.RuneSelf && ce < utf8.RuneSelf {
+		} else if p.flags&AnyCharRange != 0 && cs < utf8.RuneSelf && ce < utf8.RuneSelf {
 			op, sta, end = OpCharRange, int(cs), int(ce)
 		} else if (isUpperCase(cs) && isUpperCase(ce)) || (isLowerCase(cs) && isLowerCase(ce)) {
 			op, sta, end = OpCharRange, int(cs), int(ce)
@@ -243,7 +265,7 @@ func (p *Parser) ranges(offset int) (ok bool) {
 	}
 
 	switch {
-	case p.AnyCharRange && op == OpUnknown:
+	case p.flags&AnyCharRange != 0 && op == OpUnknown:
 		rs, rw := utf8.DecodeRune(vs)
 		if rs == utf8.RuneError || rw != ls {
 			break
@@ -313,32 +335,30 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			_, w := utf8.DecodeRuneInString(input[end:])
 			end += w
 		}
-	Skip:
-		if end >= len(input) {
-			break
-		}
-
 		/** After Escaped **/
 		if esc > 0 {
 			esc = 0
-			goto Regular
+			p.node(OpEscape, input[sta:end])
+			sta = ^sta
+		}
+	Skip:
+		if end >= len(input) {
+			break
 		}
 
 		ch := input[end]
 
 		/** Escape Character **/
 		if ch == '\\' {
-			if blk != nil && blk.ranges >= 0 {
-				blk.ranges = ^blk.ranges
-			}
-
-			if p.IgnoreEscape || end+1 >= len(input) {
+			if p.flags&IgnoreEscape != 0 || end+1 >= len(input) {
 				goto Regular
 			}
 
 			esc = ch
 			submit(end)
-			continue
+			sta = end
+			end++
+			goto Regular
 		}
 
 		/** In Quoted **/
@@ -349,6 +369,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 
 			que = 0
 			submit(end)
+			p.node(OpQuote, string(ch))
 			continue
 		}
 
@@ -357,12 +378,13 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			goto Regular
 		case '"', '\'', '`':
 			/** Quoted Character **/
-			if p.IgnoreQuote {
+			if p.flags&IgnoreQuote != 0 {
 				goto Regular
 			}
 
 			que = ch
 			submit(end)
+			p.node(OpQuote, string(ch))
 		case '{':
 			/** Braces Open **/
 			submit(end)
@@ -399,12 +421,13 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			if blk.delims > 0 || blk.ranges < 0 || blk.ranges >= 2 {
 				goto Regular
 			}
-			if numSub := len(p.stack) - blk.base; numSub != 1 && numSub != 3 {
+
+			submit(end)
+
+			if numSub := len(p.stack) - blk.base; numSub != 2 && numSub != 4 {
 				blk.ranges = ^blk.ranges
 				goto Regular
 			}
-
-			submit(end)
 
 			p.node(opBraceRange, "..")
 			blk.ranges++
@@ -441,7 +464,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 		}
 	}
 
-	if !p.NonStrictMode && que > 0 {
+	if p.flags&PermissiveMode == 0 && que > 0 {
 		return nil, buffer, ErrMissingQuote
 	}
 
@@ -461,5 +484,13 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 }
 
 func Parse(input string, buffer []byte) (*Node, []byte, error) {
-	return (&Parser{}).Parse(input, buffer)
+	return NewParser(0).Parse(input, buffer)
+}
+
+func NewParser(flags ...Flags) *Parser {
+	var flag Flags
+	for _, f := range flags {
+		flag |= f
+	}
+	return &Parser{flags: flag}
 }

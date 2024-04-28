@@ -98,6 +98,12 @@ func walk(buf []byte, node *Node, cb WalkHandler) []byte {
 		return walkCharRange(buf, node, cb)
 	case OpIntegerRange:
 		return walkIntegerRange(buf, node, cb)
+	case OpEscape:
+		return walk(append(buf, node.Val[1:]...), node.Next, cb)
+	case OpQuote:
+		return walk(buf, node.Next, cb)
+	case OpEmpty:
+		return walk(buf, node.Next, cb)
 	default:
 		return walk(append(buf, node.Val...), node.Next, cb)
 	}

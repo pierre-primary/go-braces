@@ -6,8 +6,14 @@ import (
 	"github.com/pierre-primary/go-braces/syntax"
 )
 
-type opt = syntax.Parser
-type s = string
+type E = []string
+
+const (
+	IgnoreEscape   = syntax.IgnoreEscape
+	IgnoreQuote    = syntax.IgnoreQuote
+	AnyCharRange   = syntax.AnyCharRange
+	PermissiveMode = syntax.PermissiveMode
+)
 
 //go:noinline
 func discard(s string) {}
@@ -34,11 +40,9 @@ func BenchmarkExpand(t *testing.B) {
 	t.Run("Unicode", expand("{你好吗,你在吗,你在哪}"))
 }
 
-func DefineExpand(t *testing.T) func(string, *syntax.Parser, []string) {
-	return func(input string, p *opt, expected []string) {
-		if p == nil {
-			p = &opt{}
-		}
+func DefineExpand(t *testing.T) func(string, []string, ...syntax.Flags) {
+	return func(input string, expected []string, flags ...syntax.Flags) {
+		p := syntax.NewParser(flags...)
 		ast, _, _ := p.Parse(input, nil)
 		result, _ := ast.Expand(nil, nil)
 		if len(result) != len(expected) {
@@ -138,58 +142,51 @@ func DefineExpand(t *testing.T) func(string, *syntax.Parser, []string) {
 func TestEmptyNode(t *testing.T) {
 	equal := DefineExpand(t)
 
-	equal("", nil, []s{""})
-	equal("{,}", nil, []s{"", ""})
-	equal("{,,}", nil, []s{"", "", ""})
+	equal("", E{""})
+	equal("{,}", E{"", ""})
+	equal("{,,}", E{"", "", ""})
 
-	equal("{a,}", nil, []s{"a", ""})
-	equal("{,a}", nil, []s{"", "a"})
-	equal("{a,,}", nil, []s{"a", "", ""})
-	equal("{,,a}", nil, []s{"", "", "a"})
-	equal("{,a,}", nil, []s{"", "a", ""})
-	equal("{a,,a}", nil, []s{"a", "", "a"})
+	equal("{a,}", E{"a", ""})
+	equal("{,a}", E{"", "a"})
+	equal("{a,,}", E{"a", "", ""})
+	equal("{,,a}", E{"", "", "a"})
+	equal("{,a,}", E{"", "a", ""})
+	equal("{a,,a}", E{"a", "", "a"})
 }
 
 func TestCharRange(t *testing.T) {
 	equal := DefineExpand(t)
 
-	equal("{a..b}", nil, []s{"a", "b"})
-	equal("{a..c}", nil, []s{"a", "b", "c"})
-	equal("{a..c..2}", nil, []s{"a", "c"})
-	equal("{a..c..-2}", nil, []s{"a", "c"})
-	equal("{a..c..1000}", nil, []s{"a"})
+	equal("{a..b}", E{"a", "b"})
+	equal("{a..c}", E{"a", "b", "c"})
+	equal("{a..c..2}", E{"a", "c"})
+	equal("{a..c..-2}", E{"a", "c"})
+	equal("{a..c..1000}", E{"a"})
 
-	equal("{b..a}", nil, []s{"b", "a"})
+	equal("{b..a}", E{"b", "a"})
 }
 
 func TestEscape(t *testing.T) {
 	equal := DefineExpand(t)
 
-	equal(`\{a..b}`, nil, []s{"{a..b}"})
-	// equal(`\{a..b}`, &opt{KeepEscape: true}, []s{`\{a..b}`})
-	equal(`\{a..b}`, &opt{IgnoreEscape: true}, []s{`\a`, `\b`})
+	equal(`\{a..b}`, E{"{a..b}"})
+	equal(`\{a..b}`, E{`\a`, `\b`}, IgnoreEscape)
 
-	equal(`{\a..b}`, nil, []s{"{a..b}"})
-	// equal(`{\a..b}`, &opt{KeepEscape: true}, []s{`{\a..b}`})
-	equal(`{\a..b}`, &opt{IgnoreEscape: true}, []s{`{\a..b}`})
+	equal(`{\a..b}`, E{"a", "b"})
+	equal(`{\a..b}`, E{`{\a..b}`}, IgnoreEscape)
 
-	equal(`{a\..b}`, nil, []s{"{a..b}"})
-	// equal(`{a\..b}`, &opt{KeepEscape: true}, []s{`{a\..b}`})
-	equal(`{a\..b}`, &opt{IgnoreEscape: true}, []s{`{a\..b}`})
+	equal(`{a\..b}`, E{"{a..b}"})
+	equal(`{a\..b}`, E{`{a\..b}`}, IgnoreEscape)
 
-	equal(`{a.\.b}`, nil, []s{"{a..b}"})
-	// equal(`{a.\.b}`, &opt{KeepEscape: true}, []s{`{a.\.b}`})
-	equal(`{a.\.b}`, &opt{IgnoreEscape: true}, []s{`{a.\.b}`})
+	equal(`{a.\.b}`, E{"{a..b}"})
+	equal(`{a.\.b}`, E{`{a.\.b}`}, IgnoreEscape)
 
-	equal(`{a..\b}`, nil, []s{"{a..b}"})
-	// equal(`{a..\b}`, &opt{KeepEscape: true}, []s{`{a..\b}`})
-	equal(`{a..\b}`, &opt{IgnoreEscape: true}, []s{`{a..\b}`})
+	equal(`{a..\b}`, E{"a", "b"})
+	equal(`{a..\b}`, E{`{a..\b}`}, IgnoreEscape)
 
-	equal(`{a..b\}`, nil, []s{"{a..b}"})
-	// equal(`{a..b\}`, &opt{KeepEscape: true}, []s{`{a..b\}`})
-	equal(`{a..b\}`, &opt{IgnoreEscape: true}, []s{`{a..b\}`})
+	equal(`{a..b\}`, E{"{a..b}"})
+	equal(`{a..b\}`, E{`{a..b\}`}, IgnoreEscape)
 
-	equal(`{a..b\..3}`, nil, []s{"{a..b..3}"})
-	// equal(`{a..b\..3}`, &opt{KeepEscape: true}, []s{`{a..b\..3}`})
-	equal(`{a..b\..3}`, &opt{IgnoreEscape: true}, []s{`{a..b\..3}`})
+	equal(`{a..b\..3}`, E{"{a..b..3}"})
+	equal(`{a..b\..3}`, E{`{a..b\..3}`}, IgnoreEscape)
 }

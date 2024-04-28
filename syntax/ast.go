@@ -11,6 +11,8 @@ const (
 	OpUnknown Op = iota
 	OpEmpty
 	OpLiteral
+	OpEscape
+	OpQuote
 	OpIntegerRange
 	OpCharRange
 	OpConcat
@@ -23,6 +25,10 @@ func (op Op) String() string {
 		return "Empty"
 	case OpLiteral:
 		return "Literal"
+	case OpEscape:
+		return "Escape"
+	case OpQuote:
+		return "Quote"
 	case OpIntegerRange:
 		return "IntegerRange"
 	case OpCharRange:
@@ -70,7 +76,7 @@ func (n *Node) Equal(t *Node) bool {
 		return false
 	}
 	switch n.Op {
-	case OpLiteral, OpIntegerRange, OpCharRange:
+	case OpLiteral, OpEscape, OpQuote, OpIntegerRange, OpCharRange:
 		if len(n.Val) != len(t.Val) {
 			return false
 		}
