@@ -33,6 +33,19 @@ type Parser struct {
 	free  *BraceExp
 }
 
+func NewParser(flags ...ParseFlags) *Parser {
+	var flag ParseFlags
+	for _, f := range flags {
+		flag |= f
+	}
+	return &Parser{flags: flag}
+}
+
+func Parse(input string, flags ...ParseFlags) (*BraceExp, error) {
+	exp, _, err := NewParser(flags...).Parse(input, nil)
+	return exp, err
+}
+
 func (p *Parser) newExp(op Op) (exp *BraceExp) {
 	exp = p.free
 	if exp != nil {
@@ -307,7 +320,6 @@ func (p *Parser) Parse(input string, buffer []byte) (*BraceExp, []byte, error) {
 	blocks := make([]block, 0, 4)
 	var blk *block
 
-	buffer = buffer[:0]
 	p.stack = p.stack[:0]
 	sta := -1
 
@@ -486,16 +498,4 @@ func (p *Parser) Parse(input string, buffer []byte) (*BraceExp, []byte, error) {
 	// Finalize
 	p.concat(0)
 	return p.stack[0], buffer, nil
-}
-
-func NewParser(flags ...ParseFlags) *Parser {
-	var flag ParseFlags
-	for _, f := range flags {
-		flag |= f
-	}
-	return &Parser{flags: flag}
-}
-
-func Parse(input string, buffer []byte, flags ...ParseFlags) (*BraceExp, []byte, error) {
-	return NewParser(flags...).Parse(input, buffer)
 }

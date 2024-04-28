@@ -1,23 +1,19 @@
 package main
 
-import (
-	"fmt"
-
-	"github.com/pierre-primary/go-braces/syntax"
-)
-
 func main() {
-	pattern := `abc\"def`
+	// pattern := `abc\"def`
 
-	exp, buffer, _ := syntax.Parse(pattern, nil, syntax.IgnoreEscape)
+	// exp, _ := syntax.Parse(pattern, syntax.IgnoreEscape)
 
-	exp.Walk(func(str string) {
-		fmt.Println(str)
-	}, buffer, syntax.KeepEscape)
-
-	// braces.Walk(pattern, func(str string) {
+	// exp.Walk(func(str string) {
 	// 	fmt.Println(str)
-	// })
+	// }, syntax.KeepEscape)
 
-	// braces.PrintTree(pattern)
+	// // braces.Walk(pattern, func(str string) {
+	// // 	fmt.Println(str)
+	// // })
+
+	// // braces.PrintTree(pattern)
+
+	// regexp.MustCompile("")
 }

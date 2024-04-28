@@ -16,80 +16,75 @@ const (
 	KeepQuote
 )
 
-type walker struct {
-	flags   ExpandFlags
-	handler WalkHandler
-}
-
-func (w *walker) walkAlternate(exp *BraceExp, buffer []byte) []byte {
+func walkAlternate(exp *BraceExp, flags ExpandFlags, handler WalkHandler, buffer []byte) []byte {
 	offset := len(buffer)
 	for _, item := range exp.Subs {
-		buffer = w.walk(item, buffer[:offset])
+		buffer = walk(item, flags, handler, buffer[:offset])
 	}
 	return buffer
 }
 
-func (w *walker) walkCharRange(exp *BraceExp, buffer []byte) []byte {
+func walkCharRange(exp *BraceExp, flags ExpandFlags, handler WalkHandler, buffer []byte) []byte {
 	rg := unsafe.Slice((*int)(unsafe.Pointer(&exp.Val[0])), 4)
 	sta, num, sep := rg[0], rg[1], rg[2]
 
 	offset := len(buffer)
-	buffer = w.walk(exp.Next, utf8.AppendRune(buffer, rune(sta)))
+	buffer = walk(exp.Next, flags, handler, utf8.AppendRune(buffer, rune(sta)))
 	for i := 0; i < num; i++ {
 		sta += sep
-		buffer = w.walk(exp.Next, utf8.AppendRune(buffer[:offset], rune(sta)))
+		buffer = walk(exp.Next, flags, handler, utf8.AppendRune(buffer[:offset], rune(sta)))
 	}
 	return buffer
 }
 
-func (w *walker) walkIntegerRange(exp *BraceExp, buffer []byte) []byte {
+func walkIntegerRange(exp *BraceExp, flags ExpandFlags, handler WalkHandler, buffer []byte) []byte {
 	rg := unsafe.Slice((*int)(unsafe.Pointer(&exp.Val[0])), 4)
 	sta, num, sep, wid := rg[0], rg[1], rg[2], rg[3]
 
 	offset := len(buffer)
-	buffer = w.walk(exp.Next, appendNumber(buffer, sta, wid))
+	buffer = walk(exp.Next, flags, handler, appendNumber(buffer, sta, wid))
 	for i := 0; i < num; i++ {
 		sta += sep
-		buffer = w.walk(exp.Next, appendNumber(buffer[:offset], sta, wid))
+		buffer = walk(exp.Next, flags, handler, appendNumber(buffer[:offset], sta, wid))
 	}
 	return buffer
 }
 
-func (w *walker) walkEscape(exp *BraceExp, buffer []byte) []byte {
-	if w.flags&KeepEscape == 0 {
-		return w.walk(exp.Next, append(buffer, exp.Val[1:]...))
+func walkEscape(exp *BraceExp, flags ExpandFlags, handler WalkHandler, buffer []byte) []byte {
+	if flags&KeepEscape == 0 {
+		return walk(exp.Next, flags, handler, append(buffer, exp.Val[1:]...))
 	}
-	return w.walk(exp.Next, append(buffer, exp.Val...))
+	return walk(exp.Next, flags, handler, append(buffer, exp.Val...))
 }
 
-func (w *walker) walkQuote(exp *BraceExp, buffer []byte) []byte {
-	if w.flags&KeepQuote == 0 {
-		return w.walk(exp.Next, buffer)
+func walkQuote(exp *BraceExp, flags ExpandFlags, handler WalkHandler, buffer []byte) []byte {
+	if flags&KeepQuote == 0 {
+		return walk(exp.Next, flags, handler, buffer)
 	}
-	return w.walk(exp.Next, append(buffer, exp.Val...))
+	return walk(exp.Next, flags, handler, append(buffer, exp.Val...))
 }
 
-func (w *walker) walk(exp *BraceExp, buffer []byte) []byte {
+func walk(exp *BraceExp, flags ExpandFlags, handler WalkHandler, buffer []byte) []byte {
 	if exp == nil {
-		w.handler(string(buffer))
+		handler(string(buffer))
 		return buffer
 	}
 	switch exp.Op {
 	case OpConcat:
-		return w.walk(exp.Subs[0], buffer)
+		return walk(exp.Subs[0], flags, handler, buffer)
 	case OpAlternate:
-		return w.walkAlternate(exp, buffer)
+		return walkAlternate(exp, flags, handler, buffer)
 	case OpCharRange:
-		return w.walkCharRange(exp, buffer)
+		return walkCharRange(exp, flags, handler, buffer)
 	case OpIntegerRange:
-		return w.walkIntegerRange(exp, buffer)
+		return walkIntegerRange(exp, flags, handler, buffer)
 	case OpEscape:
-		return w.walkEscape(exp, buffer)
+		return walkEscape(exp, flags, handler, buffer)
 	case OpQuote:
-		return w.walkQuote(exp, buffer)
+		return walkQuote(exp, flags, handler, buffer)
 	case OpEmpty:
-		return w.walk(exp.Next, buffer)
+		return walk(exp.Next, flags, handler, buffer)
 	default:
-		return w.walk(exp.Next, append(buffer, exp.Val...))
+		return walk(exp.Next, flags, handler, append(buffer, exp.Val...))
 	}
 }

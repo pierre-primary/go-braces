@@ -98,17 +98,17 @@ func (n *BraceExp) Equal(t *BraceExp) bool {
 	return true
 }
 
-func (n *BraceExp) Walk(callback WalkHandler, buffer []byte, flags ...ExpandFlags) []byte {
+func (n *BraceExp) Walk(handler WalkHandler, buffer []byte, flags ...ExpandFlags) []byte {
 	var flag ExpandFlags
 	for _, f := range flags {
 		flag |= f
 	}
-	return (&walker{flags: flag, handler: callback}).walk(n, buffer[:0])
+	return walk(n, flag, handler, buffer)
 }
 
-func (n *BraceExp) Expand(data []string, buffer []byte, flags ...ExpandFlags) ([]string, []byte) {
-	buffer = n.Walk(func(str string) { data = append(data, str) }, buffer, flags...)
-	return data, buffer
+func (n *BraceExp) Expand(data []string, flags ...ExpandFlags) []string {
+	n.Walk(func(str string) { data = append(data, str) }, nil, flags...)
+	return data
 }
 
 func printExp(exp *BraceExp, deepth int) {

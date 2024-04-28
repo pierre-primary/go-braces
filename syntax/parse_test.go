@@ -12,7 +12,7 @@ func BenchmarkParse(t *testing.B) {
 			t.ReportAllocs()
 			t.ResetTimer()
 			for i := 0; i < t.N; i++ {
-				syntax.Parse(input, nil)
+				syntax.Parse(input)
 			}
 		}
 	}
