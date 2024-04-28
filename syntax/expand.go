@@ -9,102 +9,87 @@ type WalkHandler func(str string)
 
 var ZEROS = [8]byte{'0', '0', '0', '0', '0', '0', '0', '0'}
 
-func appendZero(buf []byte, bits int) []byte {
-	for bits > 8 {
-		buf = append(buf, ZEROS[:8]...)
-		bits -= 8
-	}
-	if bits > 0 {
-		buf = append(buf, ZEROS[:bits]...)
-	}
-	return buf
+type ExpandFlags uint16
+
+const (
+	KeepEscape ExpandFlags = 1 << iota
+	KeepQuote
+)
+
+type walker struct {
+	flags   ExpandFlags
+	handler WalkHandler
 }
 
-func appendNumber(buf []byte, num int, align int) []byte {
-	neg := false
-	u := uint(num)
-	if num < 0 {
-		neg = true
-		u = ^u + 1
+func (w *walker) walkAlternate(exp *BraceExp, buffer []byte) []byte {
+	offset := len(buffer)
+	for _, item := range exp.Subs {
+		buffer = w.walk(item, buffer[:offset])
 	}
-
-	var a [32]byte
-	i := len(a)
-
-	for u >= 10 {
-		i--
-		a[i] = byte('0' + u%10)
-		u /= 10
-	}
-	i--
-	a[i] = byte('0' + u)
-
-	if neg {
-		align--
-		buf = append(buf, '-')
-	}
-
-	if align -= len(a[i:]); align > 0 {
-		buf = appendZero(buf, align)
-	}
-	return append(buf, a[i:]...)
+	return buffer
 }
 
-func walkAlternate(buf []byte, node *Node, cb WalkHandler) []byte {
-	offset := len(buf)
-	for _, item := range node.Subs {
-		buf = walk(buf[:offset], item, cb)
-	}
-	return buf
-}
-
-func walkCharRange(buf []byte, node *Node, cb WalkHandler) []byte {
-	rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 4)
+func (w *walker) walkCharRange(exp *BraceExp, buffer []byte) []byte {
+	rg := unsafe.Slice((*int)(unsafe.Pointer(&exp.Val[0])), 4)
 	sta, num, sep := rg[0], rg[1], rg[2]
 
-	offset := len(buf)
-	buf = walk(utf8.AppendRune(buf, rune(sta)), node.Next, cb)
+	offset := len(buffer)
+	buffer = w.walk(exp.Next, utf8.AppendRune(buffer, rune(sta)))
 	for i := 0; i < num; i++ {
 		sta += sep
-		buf = walk(utf8.AppendRune(buf[:offset], rune(sta)), node.Next, cb)
+		buffer = w.walk(exp.Next, utf8.AppendRune(buffer[:offset], rune(sta)))
 	}
-	return buf
+	return buffer
 }
 
-func walkIntegerRange(buf []byte, node *Node, cb WalkHandler) []byte {
-	rg := unsafe.Slice((*int)(unsafe.Pointer(&node.Val[0])), 4)
+func (w *walker) walkIntegerRange(exp *BraceExp, buffer []byte) []byte {
+	rg := unsafe.Slice((*int)(unsafe.Pointer(&exp.Val[0])), 4)
 	sta, num, sep, wid := rg[0], rg[1], rg[2], rg[3]
 
-	offset := len(buf)
-	buf = walk(appendNumber(buf, sta, wid), node.Next, cb)
+	offset := len(buffer)
+	buffer = w.walk(exp.Next, appendNumber(buffer, sta, wid))
 	for i := 0; i < num; i++ {
 		sta += sep
-		buf = walk(appendNumber(buf[:offset], sta, wid), node.Next, cb)
+		buffer = w.walk(exp.Next, appendNumber(buffer[:offset], sta, wid))
 	}
-	return buf
+	return buffer
 }
 
-func walk(buf []byte, node *Node, cb WalkHandler) []byte {
-	if node == nil {
-		cb(string(buf))
-		return buf
+func (w *walker) walkEscape(exp *BraceExp, buffer []byte) []byte {
+	if w.flags&KeepEscape == 0 {
+		return w.walk(exp.Next, append(buffer, exp.Val[1:]...))
 	}
-	switch node.Op {
+	return w.walk(exp.Next, append(buffer, exp.Val...))
+}
+
+func (w *walker) walkQuote(exp *BraceExp, buffer []byte) []byte {
+	if w.flags&KeepQuote == 0 {
+		return w.walk(exp.Next, buffer)
+	}
+	return w.walk(exp.Next, append(buffer, exp.Val...))
+}
+
+func (w *walker) walk(exp *BraceExp, buffer []byte) []byte {
+	if exp == nil {
+		w.handler(string(buffer))
+		return buffer
+	}
+	switch exp.Op {
 	case OpConcat:
-		return walk(buf, node.Subs[0], cb)
+		return w.walk(exp.Subs[0], buffer)
 	case OpAlternate:
-		return walkAlternate(buf, node, cb)
+		return w.walkAlternate(exp, buffer)
 	case OpCharRange:
-		return walkCharRange(buf, node, cb)
+		return w.walkCharRange(exp, buffer)
 	case OpIntegerRange:
-		return walkIntegerRange(buf, node, cb)
+		return w.walkIntegerRange(exp, buffer)
 	case OpEscape:
-		return walk(append(buf, node.Val[1:]...), node.Next, cb)
+		return w.walkEscape(exp, buffer)
 	case OpQuote:
-		return walk(buf, node.Next, cb)
+		return w.walkQuote(exp, buffer)
 	case OpEmpty:
-		return walk(buf, node.Next, cb)
+		return w.walk(exp.Next, buffer)
 	default:
-		return walk(append(buf, node.Val...), node.Next, cb)
+		return w.walk(exp.Next, append(buffer, exp.Val...))
 	}
 }

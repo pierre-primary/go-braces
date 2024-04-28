@@ -70,3 +70,44 @@ func absToUint(x int) uint {
 	}
 	return uint(x)
 }
+
+func appendZero(buf []byte, bits int) []byte {
+	for bits > 8 {
+		buf = append(buf, ZEROS[:8]...)
+		bits -= 8
+	}
+	if bits > 0 {
+		buf = append(buf, ZEROS[:bits]...)
+	}
+	return buf
+}
+
+func appendNumber(buf []byte, num int, align int) []byte {
+	neg := false
+	u := uint(num)
+	if num < 0 {
+		neg = true
+		u = ^u + 1
+	}
+
+	var a [32]byte
+	i := len(a)
+
+	for u >= 10 {
+		i--
+		a[i] = byte('0' + u%10)
+		u /= 10
+	}
+	i--
+	a[i] = byte('0' + u)
+
+	if neg {
+		align--
+		buf = append(buf, '-')
+	}
+
+	if align -= len(a[i:]); align > 0 {
+		buf = appendZero(buf, align)
+	}
+	return append(buf, a[i:]...)
+}

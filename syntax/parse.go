@@ -18,66 +18,66 @@ var (
 	ErrMissingQuote      = "missing closing quote character"
 )
 
-type Flags uint16
+type ParseFlags uint16
 
 const (
-	IgnoreEscape Flags = 1 << iota
+	IgnoreEscape ParseFlags = 1 << iota
 	IgnoreQuote
 	AnyCharRange
 	StrictMode
 )
 
 type Parser struct {
-	flags Flags
-	stack []*Node
-	free  *Node
+	flags ParseFlags
+	stack []*BraceExp
+	free  *BraceExp
 }
 
-func (p *Parser) newNode(op Op) (node *Node) {
-	node = p.free
-	if node != nil {
-		p.free = node.Next
-		*node = Node{}
+func (p *Parser) newExp(op Op) (exp *BraceExp) {
+	exp = p.free
+	if exp != nil {
+		p.free = exp.Next
+		*exp = BraceExp{}
 	} else {
-		node = new(Node)
+		exp = new(BraceExp)
 	}
-	node.Op = op
-	return node
+	exp.Op = op
+	return exp
 }
 
-func (p *Parser) reuse(node *Node) {
-	node.Next = p.free
-	p.free = node
+func (p *Parser) reuse(exp *BraceExp) {
+	exp.Next = p.free
+	p.free = exp
 }
 
-func (p *Parser) push(node *Node) {
-	p.stack = append(p.stack, node)
+func (p *Parser) push(exp *BraceExp) {
+	p.stack = append(p.stack, exp)
 }
 
-func (p *Parser) node(op Op, val string) {
-	node := p.newNode(op)
-	node.Val = append(node.Val0[:0], val...)
-	p.push(node)
+func (p *Parser) op(op Op, val string) {
+	exp := p.newExp(op)
+	exp.Val = append(exp.Val0[:0], val...)
+	p.push(exp)
 }
 
 func (p *Parser) literal(val string) {
 	if len(p.stack) > 0 {
-		if node := p.stack[len(p.stack)-1]; node.Op == OpLiteral {
-			node.Val = append(node.Val, val...)
+		if exp := p.stack[len(p.stack)-1]; exp.Op == OpLiteral {
+			exp.Val = append(exp.Val, val...)
 			return
 		}
 	}
-	p.node(OpLiteral, val)
+	p.op(OpLiteral, val)
 }
 
-func (p *Parser) flatten(subs []*Node, op Op, nodes []*Node) []*Node {
-	for _, item := range nodes {
-		if item.Op < opPseudo {
-			if item.Op == op {
-				subs = append(subs, item.Subs...)
-				p.reuse(item)
+func (p *Parser) flatten(subs []*BraceExp, op Op, set []*BraceExp) []*BraceExp {
+	for _, exp := range set {
+		if exp.Op < opPseudo {
+			if exp.Op == op {
+				subs = append(subs, exp.Subs...)
+				p.reuse(exp)
 			} else {
-				subs = append(subs, item)
+				subs = append(subs, exp)
 			}
 		}
 	}
@@ -94,43 +94,43 @@ func (p *Parser) concat(offset int) {
 
 	switch len(p.stack) - offset {
 	case 0:
-		p.node(OpEmpty, "")
+		p.op(OpEmpty, "")
 		fallthrough
 	case 1:
 		return
 	}
 
-	nodes := p.stack[offset:]
+	set := p.stack[offset:]
 	p.stack = p.stack[:offset]
 
-	node := p.newNode(OpConcat)
-	node.Subs = p.flatten(node.Subs, OpConcat, nodes)
-	if subs := node.Subs; len(subs) > 1 {
+	exp := p.newExp(OpConcat)
+	exp.Subs = p.flatten(exp.Subs, OpConcat, set)
+	if subs := exp.Subs; len(subs) > 1 {
 		last := subs[0]
-		for _, item := range subs[1:] {
-			last.link(item)
-			last = item
+		for _, sub := range subs[1:] {
+			last.link(sub)
+			last = sub
 		}
 	}
-	p.push(node)
+	p.push(exp)
 }
 
 func (p *Parser) alternate(offset int) {
-	nodes := p.stack[offset:]
+	set := p.stack[offset:]
 	p.stack = p.stack[:offset]
 
-	// ASSERT: at least two nodes required
-	node := p.newNode(OpAlternate)
-	node.Subs = p.flatten(node.Subs, OpAlternate, nodes)
-	// TODO: optimize node.Subs
-	p.push(node)
+	// ASSERT: at least two sub-exps required
+	exp := p.newExp(OpAlternate)
+	exp.Subs = p.flatten(exp.Subs, OpAlternate, set)
+	// TODO: optimize exp.Subs
+	p.push(exp)
 }
 
 func (p *Parser) literalize(offset int, backward bool, buffer []byte) []byte {
 	if backward && offset > 0 && p.stack[offset-1].Op == OpLiteral {
 		offset--
 	}
-	var first *Node
+	var first *BraceExp
 	for idx := offset; idx < len(p.stack); idx++ {
 		item := p.stack[idx]
 		if item.Op == OpLiteral || item.Op >= opPseudo {
@@ -195,38 +195,38 @@ func careateRangeData(sta, end, sep, wid int) (bool, []byte) {
 }
 
 func (p *Parser) ranges(offset int) (ok bool) {
-	nodes := p.stack[offset:]
+	set := p.stack[offset:]
 	sep := 0
-	switch len(nodes) {
+	switch len(set) {
 	default:
 		return false
 	case 6:
-		if _ = nodes[5]; nodes[4].Op != opBraceRange || nodes[5].Op != OpLiteral {
+		if _ = set[5]; set[4].Op != opBraceRange || set[5].Op != OpLiteral {
 			return false
 		}
-		if ok, sep = parseInt(nodes[5].Val); !ok {
+		if ok, sep = parseInt(set[5].Val); !ok {
 			return false
 		}
 		fallthrough
 	case 4:
-		if _ = nodes[3]; nodes[2].Op != opBraceRange {
+		if _ = set[3]; set[2].Op != opBraceRange {
 			return false
 		}
 	}
 
 	var vs, ve []byte
-	if nodes[1].Op == OpLiteral {
-		vs = nodes[1].Val
-	} else if nodes[1].Op == OpEscape {
-		vs = nodes[1].Val[1:]
+	if set[1].Op == OpLiteral {
+		vs = set[1].Val
+	} else if set[1].Op == OpEscape {
+		vs = set[1].Val[1:]
 	} else {
 		return false
 	}
 
-	if nodes[3].Op == OpLiteral {
-		ve = nodes[3].Val
-	} else if nodes[3].Op == OpEscape {
-		ve = nodes[3].Val[1:]
+	if set[3].Op == OpLiteral {
+		ve = set[3].Val
+	} else if set[3].Op == OpEscape {
+		ve = set[3].Val[1:]
 	} else {
 		return false
 	}
@@ -288,17 +288,17 @@ func (p *Parser) ranges(offset int) (ok bool) {
 	}
 
 	p.stack = p.stack[:offset]
-	for _, item := range nodes {
-		p.reuse(item)
+	for _, exp := range set {
+		p.reuse(exp)
 	}
 
-	node := p.newNode(op)
-	node.Val = data
-	p.push(node)
+	exp := p.newExp(op)
+	exp.Val = data
+	p.push(exp)
 	return true
 }
 
-func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
+func (p *Parser) Parse(input string, buffer []byte) (*BraceExp, []byte, error) {
 	type block struct {
 		base   int // Base Stack Index
 		ranges int
@@ -345,7 +345,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 		/** Escape **/
 		if esc > 0 {
 			esc = 0
-			p.node(OpEscape, input[sta:end])
+			p.op(OpEscape, input[sta:end])
 			sta = ^sta
 		}
 	Skip:
@@ -363,7 +363,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			submit(end)
 
 			que = 0
-			p.node(OpQuote, string(ch))
+			p.op(OpQuote, string(ch))
 			continue
 		}
 
@@ -387,6 +387,8 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			if p.flags&StrictMode != 0 {
 				return nil, buffer, &Error{ErrTrailingBackslash, -1}
 			}
+
+			p.op(OpEscape, "\\")
 		case '"', '\'':
 			/** Quoted Character **/
 			if p.flags&IgnoreQuote != 0 {
@@ -396,14 +398,14 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 
 			que = ch
 			queSta = end
-			p.node(OpQuote, string(ch))
+			p.op(OpQuote, string(ch))
 		case '{':
 			/** Braces Open **/
 			submit(end)
 
 			blocks = append(blocks, block{base: len(p.stack), delims: 0, ranges: 0})
 			blk = &blocks[len(blocks)-1]
-			p.node(opBraceOpen, "{")
+			p.op(opBraceOpen, "{")
 		case ',':
 			/** Braces Comma Separator **/
 			if blk == nil {
@@ -418,7 +420,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 
 			blk.delims++
 			p.concat(-1)
-			p.node(opBraceDelim, ",")
+			p.op(opBraceDelim, ",")
 		case '.':
 			/** Braces Range Separator **/
 			if blk == nil || blk.delims > 0 || blk.ranges < 0 || blk.ranges >= 2 {
@@ -436,7 +438,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			end++
 
 			blk.ranges++
-			p.node(opBraceRange, "..")
+			p.op(opBraceRange, "..")
 		case '}':
 			/** Braces Close **/
 			if blk == nil {
@@ -486,14 +488,14 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 	return p.stack[0], buffer, nil
 }
 
-func NewParser(flags ...Flags) *Parser {
-	var flag Flags
+func NewParser(flags ...ParseFlags) *Parser {
+	var flag ParseFlags
 	for _, f := range flags {
 		flag |= f
 	}
 	return &Parser{flags: flag}
 }
 
-func Parse(input string, buffer []byte, flags ...Flags) (*Node, []byte, error) {
+func Parse(input string, buffer []byte, flags ...ParseFlags) (*BraceExp, []byte, error) {
 	return NewParser(flags...).Parse(input, buffer)
 }

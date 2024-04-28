@@ -9,23 +9,28 @@ import (
 type E = []string
 
 const (
-	IgnoreEscape = syntax.IgnoreEscape
-	IgnoreQuote  = syntax.IgnoreQuote
-	AnyCharRange = syntax.AnyCharRange
-	StrictMode   = syntax.StrictMode
+	KeepEscape = syntax.KeepEscape
+	KeepQuote  = syntax.KeepQuote
 )
 
 //go:noinline
 func discard(s string) {}
 
 func BenchmarkExpand(t *testing.B) {
+	p := syntax.NewParser()
+	var buf []byte
 	expand := func(input string) func(t *testing.B) {
 		return func(t *testing.B) {
-			ast, _, _ := syntax.Parse(input, nil)
+			var exp *syntax.BraceExp
+			var err error
+			exp, buf, err = p.Parse(input, buf)
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.ReportAllocs()
 			t.ResetTimer()
 			for i := 0; i < t.N; i++ {
-				ast.Walk(discard, nil)
+				exp.Walk(discard, nil)
 			}
 		}
 	}
@@ -40,11 +45,18 @@ func BenchmarkExpand(t *testing.B) {
 	t.Run("Unicode", expand("{你好吗,你在吗,你在哪}"))
 }
 
-func DefineExpand(t *testing.T) func(string, []string, ...syntax.Flags) {
-	return func(input string, expected []string, flags ...syntax.Flags) {
-		p := syntax.NewParser(flags...)
-		ast, _, _ := p.Parse(input, nil)
-		result, _ := ast.Expand(nil, nil)
+func DefineExpand(t *testing.T) func(string, []string, ...syntax.ExpandFlags) {
+	p := syntax.NewParser()
+	var buf []byte
+	return func(input string, expected []string, flags ...syntax.ExpandFlags) {
+		var exp *syntax.BraceExp
+		var err error
+		exp, buf, err = p.Parse(input, buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result []string
+		result, buf = exp.Expand(nil, buf, flags...)
 		if len(result) != len(expected) {
 			t.Fatal(result)
 			return
@@ -170,23 +182,23 @@ func TestEscape(t *testing.T) {
 	equal := DefineExpand(t)
 
 	equal(`\{a..b}`, E{"{a..b}"})
-	equal(`\{a..b}`, E{`\a`, `\b`}, IgnoreEscape)
+	equal(`\{a..b}`, E{`\{a..b}`}, KeepEscape)
 
 	equal(`{\a..b}`, E{"a", "b"})
-	equal(`{\a..b}`, E{`{\a..b}`}, IgnoreEscape)
+	equal(`{\a..b}`, E{"a", "b"}, KeepEscape)
 
 	equal(`{a\..b}`, E{"{a..b}"})
-	equal(`{a\..b}`, E{`{a\..b}`}, IgnoreEscape)
+	equal(`{a\..b}`, E{`{a\..b}`}, KeepEscape)
 
 	equal(`{a.\.b}`, E{"{a..b}"})
-	equal(`{a.\.b}`, E{`{a.\.b}`}, IgnoreEscape)
+	equal(`{a.\.b}`, E{`{a.\.b}`}, KeepEscape)
 
 	equal(`{a..\b}`, E{"a", "b"})
-	equal(`{a..\b}`, E{`{a..\b}`}, IgnoreEscape)
+	equal(`{a..\b}`, E{"a", "b"}, KeepEscape)
 
 	equal(`{a..b\}`, E{"{a..b}"})
-	equal(`{a..b\}`, E{`{a..b\}`}, IgnoreEscape)
+	equal(`{a..b\}`, E{`{a..b\}`}, KeepEscape)
 
 	equal(`{a..b\..3}`, E{"{a..b..3}"})
-	equal(`{a..b\..3}`, E{`{a..b\..3}`}, IgnoreEscape)
+	equal(`{a..b\..3}`, E{`{a..b\..3}`}, KeepEscape)
 }
