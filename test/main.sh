@@ -8,3 +8,4 @@ test() {
 
 zzz=10
 
+test "\'"

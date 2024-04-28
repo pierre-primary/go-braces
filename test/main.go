@@ -7,11 +7,12 @@ import (
 )
 
 func main() {
-	pattern := `"abc\"def"`
+	pattern := `"abcdef"`
 
 	braces.Walk(pattern, func(str string) {
 		fmt.Println(str)
 	})
 
 	braces.PrintTree(pattern)
+
 }

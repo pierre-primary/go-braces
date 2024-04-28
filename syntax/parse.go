@@ -335,9 +335,12 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			_, w := utf8.DecodeRuneInString(input[end:])
 			end += w
 		}
-		/** After Escaped **/
+		/** Escape **/
 		if esc > 0 {
 			esc = 0
+			if que > 0 {
+				goto Regular
+			}
 			p.node(OpEscape, input[sta:end])
 			sta = ^sta
 		}
@@ -348,21 +351,12 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 
 		ch := input[end]
 
-		/** Escape Character **/
-		if ch == '\\' {
-			if p.flags&IgnoreEscape != 0 || end+1 >= len(input) {
-				goto Regular
-			}
-
-			esc = ch
-			submit(end)
-			sta = end
-			end++
-			goto Regular
-		}
-
 		/** In Quoted **/
 		if que > 0 {
+			if ch == '\\' {
+				esc = ch
+				goto Regular
+			}
 			if que != ch {
 				goto Regular
 			}
@@ -375,6 +369,17 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 
 		switch ch {
 		default:
+			goto Regular
+		case '\\':
+			/** Escape Character **/
+			if p.flags&IgnoreEscape != 0 || end+1 >= len(input) {
+				goto Regular
+			}
+
+			esc = ch
+			submit(end)
+			sta = end
+			end++
 			goto Regular
 		case '"', '\'', '`':
 			/** Quoted Character **/
@@ -483,14 +488,14 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 	return p.stack[0], buffer, nil
 }
 
-func Parse(input string, buffer []byte) (*Node, []byte, error) {
-	return NewParser(0).Parse(input, buffer)
-}
-
 func NewParser(flags ...Flags) *Parser {
 	var flag Flags
 	for _, f := range flags {
 		flag |= f
 	}
 	return &Parser{flags: flag}
+}
+
+func Parse(input string, buffer []byte, flags ...Flags) (*Node, []byte, error) {
+	return NewParser(flags...).Parse(input, buffer)
 }
