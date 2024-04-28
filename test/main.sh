@@ -8,4 +8,4 @@ test() {
 
 zzz=10
 
-test "\'"
+test ggg\tgfdg

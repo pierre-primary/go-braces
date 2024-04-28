@@ -5,7 +5,7 @@ import (
 )
 
 func Compile(pattern string) (*Walker, error) {
-	ast, buffer, err := syntax.Parse(pattern, nil)
+	ast, buffer, err := syntax.Parse(pattern, nil, syntax.StrictMode)
 	if err != nil {
 		return nil, err
 	}
@@ -21,7 +21,7 @@ func MustCompile(pattern string) *Walker {
 }
 
 func Walk(input string, callback WalkHandler) {
-	ast, buffer, err := syntax.Parse(input, nil, syntax.PermissiveMode)
+	ast, buffer, err := syntax.Parse(input, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -29,7 +29,7 @@ func Walk(input string, callback WalkHandler) {
 }
 
 func Expand(input string) []string {
-	ast, buffer, err := syntax.Parse(input, nil, syntax.PermissiveMode)
+	ast, buffer, err := syntax.Parse(input, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -38,7 +38,7 @@ func Expand(input string) []string {
 }
 
 func AppendExpand(data []string, input string) []string {
-	ast, buffer, err := syntax.Parse(input, nil, syntax.PermissiveMode)
+	ast, buffer, err := syntax.Parse(input, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -47,7 +47,7 @@ func AppendExpand(data []string, input string) []string {
 }
 
 func PrintTree(input string) {
-	ast, _, err := syntax.Parse(input, nil, syntax.PermissiveMode)
+	ast, _, err := syntax.Parse(input, nil)
 	if err != nil {
 		panic(err)
 	}

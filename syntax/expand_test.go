@@ -9,10 +9,10 @@ import (
 type E = []string
 
 const (
-	IgnoreEscape   = syntax.IgnoreEscape
-	IgnoreQuote    = syntax.IgnoreQuote
-	AnyCharRange   = syntax.AnyCharRange
-	PermissiveMode = syntax.PermissiveMode
+	IgnoreEscape = syntax.IgnoreEscape
+	IgnoreQuote  = syntax.IgnoreQuote
+	AnyCharRange = syntax.AnyCharRange
+	StrictMode   = syntax.StrictMode
 )
 
 //go:noinline

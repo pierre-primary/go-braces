@@ -1,7 +1,6 @@
 package syntax
 
 import (
-	"errors"
 	"math"
 	"unicode/utf8"
 	"unsafe"
@@ -14,7 +13,9 @@ const (
 )
 
 var (
-	ErrMissingQuote = errors.New("missing closing quote character")
+	ErrInvalidUTF8       = "invalid UTF-8"
+	ErrTrailingBackslash = "trailing backslash at end of expression"
+	ErrMissingQuote      = "missing closing quote character"
 )
 
 type Flags uint16
@@ -23,7 +24,7 @@ const (
 	IgnoreEscape Flags = 1 << iota
 	IgnoreQuote
 	AnyCharRange
-	PermissiveMode
+	StrictMode
 )
 
 type Parser struct {
@@ -322,6 +323,7 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 	}
 
 	var que, esc byte
+	var queSta int
 
 	for end := 0; ; end++ {
 		goto Skip
@@ -329,18 +331,20 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 		if sta < 0 {
 			sta = end
 		}
+
 		if input[end] < utf8.RuneSelf {
 			end++
-		} else {
-			_, w := utf8.DecodeRuneInString(input[end:])
+		} else if c, w := utf8.DecodeRuneInString(input[end:]); c == utf8.RuneError && p.flags&StrictMode != 0 {
+			return nil, buffer, &Error{ErrInvalidUTF8, end}
+		} else if w > 0 {
 			end += w
+		} else {
+			break
 		}
+
 		/** Escape **/
 		if esc > 0 {
 			esc = 0
-			if que > 0 {
-				goto Regular
-			}
 			p.node(OpEscape, input[sta:end])
 			sta = ^sta
 		}
@@ -348,21 +352,17 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 		if end >= len(input) {
 			break
 		}
-
 		ch := input[end]
 
 		/** In Quoted **/
 		if que > 0 {
-			if ch == '\\' {
-				esc = ch
-				goto Regular
-			}
-			if que != ch {
+			if que != ch || input[end-1] == '\\' {
 				goto Regular
 			}
 
-			que = 0
 			submit(end)
+
+			que = 0
 			p.node(OpQuote, string(ch))
 			continue
 		}
@@ -372,27 +372,35 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			goto Regular
 		case '\\':
 			/** Escape Character **/
-			if p.flags&IgnoreEscape != 0 || end+1 >= len(input) {
+			if p.flags&IgnoreEscape != 0 {
+				goto Regular
+			}
+			submit(end)
+
+			if end+1 < len(input) {
+				esc = ch
+				sta = end
+				end++
 				goto Regular
 			}
 
-			esc = ch
-			submit(end)
-			sta = end
-			end++
-			goto Regular
-		case '"', '\'', '`':
+			if p.flags&StrictMode != 0 {
+				return nil, buffer, &Error{ErrTrailingBackslash, -1}
+			}
+		case '"', '\'':
 			/** Quoted Character **/
 			if p.flags&IgnoreQuote != 0 {
 				goto Regular
 			}
+			submit(end)
 
 			que = ch
-			submit(end)
+			queSta = end
 			p.node(OpQuote, string(ch))
 		case '{':
 			/** Braces Open **/
 			submit(end)
+
 			blocks = append(blocks, block{base: len(p.stack), delims: 0, ranges: 0})
 			blk = &blocks[len(blocks)-1]
 			p.node(opBraceOpen, "{")
@@ -401,42 +409,34 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 			if blk == nil {
 				goto Regular
 			}
+			submit(end)
 
-			// range mode => alternate mode
-			if blk.ranges < -1 || blk.ranges > 0 {
+			if blk.ranges < -1 || blk.ranges > 0 { // range mode => alternate mode
 				blk.ranges = 0
 				literalize(blk.base+1, false)
 			}
 
-			submit(end)
-
+			blk.delims++
 			p.concat(-1)
 			p.node(opBraceDelim, ",")
-			blk.delims++
 		case '.':
 			/** Braces Range Separator **/
-			if blk == nil {
+			if blk == nil || blk.delims > 0 || blk.ranges < 0 || blk.ranges >= 2 {
 				goto Regular
 			}
 			if end+1 >= len(input) || input[end+1] != '.' {
 				goto Regular
 			}
-
-			// invalid range
-			if blk.delims > 0 || blk.ranges < 0 || blk.ranges >= 2 {
-				goto Regular
-			}
-
 			submit(end)
 
-			if numSub := len(p.stack) - blk.base; numSub != 2 && numSub != 4 {
+			if numSub := len(p.stack) - blk.base; numSub != 2 && numSub != 4 { // invalid range symbol
 				blk.ranges = ^blk.ranges
 				goto Regular
 			}
-
-			p.node(opBraceRange, "..")
-			blk.ranges++
 			end++
+
+			blk.ranges++
+			p.node(opBraceRange, "..")
 		case '}':
 			/** Braces Close **/
 			if blk == nil {
@@ -469,18 +469,16 @@ func (p *Parser) Parse(input string, buffer []byte) (*Node, []byte, error) {
 		}
 	}
 
-	if p.flags&PermissiveMode == 0 && que > 0 {
-		return nil, buffer, ErrMissingQuote
+	if que > 0 && p.flags&StrictMode != 0 {
+		return nil, buffer, &Error{ErrMissingQuote, queSta}
 	}
+
+	// Last Literal
+	submit(len(input))
 
 	// Non-Closed braces rollback to literal
 	if len(blocks) > 0 {
 		literalize(blocks[0].base, true)
-	}
-
-	// Last Literal
-	if sta >= 0 {
-		p.literal(input[sta:])
 	}
 
 	// Finalize

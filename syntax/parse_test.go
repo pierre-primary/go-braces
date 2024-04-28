@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/pierre-primary/go-braces/syntax"
-
-	rgx_syntax "regexp/syntax"
 )
 
 func BenchmarkParse(t *testing.B) {
@@ -27,16 +25,4 @@ func BenchmarkParse(t *testing.B) {
 	t.Run("IntRange:10", Parse("{1..10}"))
 	t.Run("IntRange:100", Parse("{1..100}"))
 	t.Run("Unicode", Parse("{你好吗,你在吗,你在哪}"))
-}
-
-func BenchmarkXxx1(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		syntax.Parse("abc", nil)
-	}
-}
-
-func BenchmarkXxx2(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		rgx_syntax.Parse("abc", rgx_syntax.POSIX)
-	}
 }
