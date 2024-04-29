@@ -43,11 +43,12 @@ func (op Op) String() string {
 }
 
 type BraceExp struct {
-	Op   Op
-	Subs []*BraceExp
-	Next *BraceExp
-	Val  []byte
-	Val0 [2]byte
+	Op       Op
+	Subs     []*BraceExp
+	Next     *BraceExp
+	Val      []byte
+	Val0     [2]byte
+	sta, end int
 }
 
 const opPseudo Op = 128 // where pseudo-ops start
