@@ -6,28 +6,28 @@ import (
 
 type WalkHandler = syntax.WalkHandler
 
-func Walk(input string, handler WalkHandler, flags ...syntax.ExpandFlags) {
+func Walk(input string, handler WalkHandler) {
 	exp, err := syntax.Parse(input)
 	if err != nil {
 		panic(err)
 	}
-	exp.Walk(handler, flags...)
+	exp.Walk(handler)
 }
 
-func Expand(input string, flags ...syntax.ExpandFlags) []string {
+func Expand(input string) []string {
 	exp, err := syntax.Parse(input)
 	if err != nil {
 		panic(err)
 	}
-	return exp.Expand(nil, flags...)
+	return exp.Expand(nil)
 }
 
-func AppendExpand(data []string, input string, flags ...syntax.ExpandFlags) []string {
+func AppendExpand(data []string, input string) []string {
 	exp, err := syntax.Parse(input)
 	if err != nil {
 		panic(err)
 	}
-	return exp.Expand(data, flags...)
+	return exp.Expand(data)
 }
 
 func PrintTree(input string) {

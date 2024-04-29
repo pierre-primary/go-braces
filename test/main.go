@@ -1,19 +1,17 @@
 package main
 
+import (
+	"fmt"
+
+	"github.com/pierre-primary/go-braces"
+)
+
 func main() {
-	// pattern := `abc\"def`
+	input := `abc\"def`
 
-	// exp, _ := syntax.Parse(pattern, syntax.IgnoreEscape)
-
-	// exp.Walk(func(str string) {
-	// 	fmt.Println(str)
-	// }, syntax.KeepEscape)
-
-	// // braces.Walk(pattern, func(str string) {
-	// // 	fmt.Println(str)
-	// // })
-
-	// // braces.PrintTree(pattern)
+	braces.Walk(input, func(str string) {
+		fmt.Println(str)
+	})
 
 	// regexp.MustCompile("")
 }
