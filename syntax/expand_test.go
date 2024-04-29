@@ -17,19 +17,16 @@ const (
 func discard(s string) {}
 
 func BenchmarkExpand(t *testing.B) {
-	p := syntax.NewParser()
 	expand := func(input string) func(t *testing.B) {
 		return func(t *testing.B) {
-			var exp *syntax.BraceExp
-			var err error
-			exp, _, err = p.Parse(input, nil)
+			exp, err := syntax.Parse(input)
 			if err != nil {
 				t.Fatal(err)
 			}
 			t.ReportAllocs()
 			t.ResetTimer()
 			for i := 0; i < t.N; i++ {
-				exp.Walk(discard, nil)
+				exp.Walk(discard)
 			}
 		}
 	}
@@ -45,11 +42,8 @@ func BenchmarkExpand(t *testing.B) {
 }
 
 func DefineExpand(t *testing.T) func(string, []string, ...syntax.ExpandFlags) {
-	p := syntax.NewParser()
 	return func(input string, expected []string, flags ...syntax.ExpandFlags) {
-		var exp *syntax.BraceExp
-		var err error
-		exp, _, err = p.Parse(input, nil)
+		exp, err := syntax.Parse(input)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -11,7 +11,7 @@ func Walk(input string, handler WalkHandler, flags ...syntax.ExpandFlags) {
 	if err != nil {
 		panic(err)
 	}
-	exp.Walk(handler, nil, flags...)
+	exp.Walk(handler, flags...)
 }
 
 func Expand(input string, flags ...syntax.ExpandFlags) []string {

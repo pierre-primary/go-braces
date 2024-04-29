@@ -68,49 +68,6 @@ func (n *BraceExp) link(next *BraceExp) {
 	}
 }
 
-func (n *BraceExp) Equal(t *BraceExp) bool {
-	if n == nil || t == nil {
-		return n == t
-	}
-	if n.Op != t.Op {
-		return false
-	}
-	switch n.Op {
-	case OpLiteral, OpEscape, OpQuote, OpIntegerRange, OpCharRange:
-		if len(n.Val) != len(t.Val) {
-			return false
-		}
-		for i, r := range n.Val {
-			if r != t.Val[i] {
-				return false
-			}
-		}
-	case OpConcat, OpAlternate:
-		if len(n.Subs) != len(t.Subs) {
-			return false
-		}
-		for i, item := range n.Subs {
-			if !item.Equal(t.Subs[i]) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (n *BraceExp) Walk(handler WalkHandler, buffer []byte, flags ...ExpandFlags) []byte {
-	var flag ExpandFlags
-	for _, f := range flags {
-		flag |= f
-	}
-	return walk(n, flag, handler, buffer)
-}
-
-func (n *BraceExp) Expand(data []string, flags ...ExpandFlags) []string {
-	n.Walk(func(str string) { data = append(data, str) }, nil, flags...)
-	return data
-}
-
 func printExp(exp *BraceExp, deepth int) {
 	switch exp.Op {
 	case OpCharRange:
@@ -141,4 +98,51 @@ func printExp(exp *BraceExp, deepth int) {
 
 func (n *BraceExp) Print() {
 	printExp(n, 0)
+}
+
+func (n *BraceExp) Equal(t *BraceExp) bool {
+	if n == nil || t == nil {
+		return n == t
+	}
+	if n.Op != t.Op {
+		return false
+	}
+	switch n.Op {
+	case OpLiteral, OpEscape, OpQuote, OpIntegerRange, OpCharRange:
+		if len(n.Val) != len(t.Val) {
+			return false
+		}
+		for i, r := range n.Val {
+			if r != t.Val[i] {
+				return false
+			}
+		}
+	case OpConcat, OpAlternate:
+		if len(n.Subs) != len(t.Subs) {
+			return false
+		}
+		for i, item := range n.Subs {
+			if !item.Equal(t.Subs[i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (n *BraceExp) walk(handler WalkHandler, buffer []byte, flags ...ExpandFlags) []byte {
+	var flag ExpandFlags
+	for _, f := range flags {
+		flag |= f
+	}
+	return walk(n, flag, handler, buffer)
+}
+
+func (n *BraceExp) Walk(handler WalkHandler, flags ...ExpandFlags) {
+	n.walk(handler, nil, flags...)
+}
+
+func (n *BraceExp) Expand(data []string, flags ...ExpandFlags) []string {
+	n.Walk(func(str string) { data = append(data, str) }, flags...)
+	return data
 }
