@@ -130,7 +130,7 @@ func (n *BraceExp) Equal(t *BraceExp) bool {
 	return true
 }
 
-func (n *BraceExp) walk(handler WalkHandler, buffer []byte, flags ...ExpandFlags) []byte {
+func (n *BraceExp) WalkWithBuffer(handler WalkHandler, buffer []byte, flags ...ExpandFlags) []byte {
 	var flag ExpandFlags
 	for _, f := range flags {
 		flag |= f
@@ -138,11 +138,17 @@ func (n *BraceExp) walk(handler WalkHandler, buffer []byte, flags ...ExpandFlags
 	return walk(n, flag, handler, buffer)
 }
 
+func (n *BraceExp) ExpandWithBuffer(data []string, buffer []byte, flags ...ExpandFlags) ([]string, []byte) {
+	buffer = n.WalkWithBuffer(func(str string) { data = append(data, str) }, buffer, flags...)
+	return data, buffer
+
+}
+
 func (n *BraceExp) Walk(handler WalkHandler, flags ...ExpandFlags) {
-	n.walk(handler, nil, flags...)
+	n.WalkWithBuffer(handler, nil, flags...)
 }
 
 func (n *BraceExp) Expand(data []string, flags ...ExpandFlags) []string {
-	n.Walk(func(str string) { data = append(data, str) }, flags...)
+	n.WalkWithBuffer(func(str string) { data = append(data, str) }, nil, flags...)
 	return data
 }

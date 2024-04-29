@@ -45,8 +45,12 @@ func Parse(input string, flags ...ParseFlags) (*BraceExp, error) {
 	return NewParser(flags...).Parse(input)
 }
 
+func ParseWithBuffer(input string, buffer []byte, flags ...ParseFlags) (*BraceExp, []byte, error) {
+	return NewParser(flags...).ParseWithBuffer(input, buffer)
+}
+
 func (p *Parser) Parse(input string) (*BraceExp, error) {
-	exp, _, err := p.parse(input, nil)
+	exp, _, err := p.ParseWithBuffer(input, nil)
 	return exp, err
 }
 
@@ -315,7 +319,7 @@ func (p *Parser) ranges(offset int) (ok bool) {
 	return true
 }
 
-func (p *Parser) parse(input string, buffer []byte) (*BraceExp, []byte, error) {
+func (p *Parser) ParseWithBuffer(input string, buffer []byte) (*BraceExp, []byte, error) {
 	type block struct {
 		base   int // Base Stack Index
 		ranges int

@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	input := `abc\"def`
+	input := `abc{a,b}def`
 
 	braces.Walk(input, func(str string) {
 		fmt.Println(str)
